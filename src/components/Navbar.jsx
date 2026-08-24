@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useCart } from "../context/useCart";
 
-const Navbar = ({ onCartOpen, onNavClick }) => {
+const Navbar = ({ onCartOpen, onNavClick, onShopNow }) => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { totalItems } = useCart();
@@ -59,7 +59,7 @@ const Navbar = ({ onCartOpen, onNavClick }) => {
               <span className="navbar__cart-count" aria-label={`${totalItems} items in cart`}>{totalItems}</span>
             )}
           </button>
-          <button className="btn btn--primary btn--sm" onClick={() => handleNav("collection")}>
+          <button className="btn btn--primary btn--sm" onClick={onShopNow || (() => handleNav("collection"))}>
             Shop Now
           </button>
 

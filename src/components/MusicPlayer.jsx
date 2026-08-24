@@ -1,5 +1,23 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { songs } from "../data/products";
+
+// Mood-based musical scales for Web Audio tone generation
+const moodScales = {
+  energetic: [523, 659, 784, 880, 1047],  // C major high
+  chill:     [220, 277, 330, 370, 440],    // A minor low
+  romantic:  [349, 440, 523, 587, 698],    // F major mid
+  happy:     [392, 494, 587, 659, 784],    // G major
+  focused:   [261, 329, 392, 440, 523],    // C major mid
+  sleepy:    [174, 220, 261, 294, 349],    // F major low
+};
+
+function createAudioContext() {
+  try {
+    return new (window.AudioContext || window.webkitAudioContext)();
+  } catch {
+    return null;
+  }
+}
 
 const MusicPlayer = ({ activeSong: externalSong }) => {
   const [baseIndex, setBaseIndex] = useState(0);
@@ -8,22 +26,107 @@ const MusicPlayer = ({ activeSong: externalSong }) => {
   const [volume, setVolume] = useState(75);
   const [liked, setLiked] = useState({});
   const intervalRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const nodesRef = useRef([]);
 
   const externalIndex = externalSong ? songs.findIndex((s) => s.id === externalSong.id) : -1;
   const currentIndex = externalIndex !== -1 ? externalIndex : baseIndex;
   const currentSong = songs[currentIndex];
 
-  const handlePlay = () => setPlaying((p) => !p);
+  // Stop all currently playing audio nodes
+  const stopAudio = useCallback(() => {
+    nodesRef.current.forEach((n) => {
+      try { n.stop(); } catch {}
+    });
+    nodesRef.current = [];
+  }, []);
 
-  const handleNext = () => {
+  // Play a looping ambient tone sequence for the current song's mood
+  const startAudio = useCallback((mood, vol) => {
+    stopAudio();
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+
+    const scale = moodScales[mood] || moodScales.happy;
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime((vol / 100) * 0.18, ctx.currentTime);
+    masterGain.connect(ctx.destination);
+
+    // Play a gentle arpeggio loop using the mood scale
+    scale.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      osc.type = mood === "energetic" ? "sawtooth" : mood === "focused" ? "square" : "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+      // Detune slightly for a richer sound
+      osc.detune.setValueAtTime((i % 2 === 0 ? 5 : -5), ctx.currentTime);
+
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      // Stagger each note entry
+      gainNode.gain.setTargetAtTime(0.12, ctx.currentTime + i * 0.3, 0.1);
+
+      osc.connect(gainNode);
+      gainNode.connect(masterGain);
+      osc.start(ctx.currentTime + i * 0.3);
+
+      nodesRef.current.push(osc);
+    });
+
+    // Keep a reference to masterGain so we can update volume
+    nodesRef.current.push(masterGain);
+  }, [stopAudio]);
+
+  // Update volume on all active gain nodes
+  useEffect(() => {
+    const masterGain = nodesRef.current[nodesRef.current.length - 1];
+    if (masterGain && masterGain.gain) {
+      masterGain.gain.setTargetAtTime((volume / 100) * 0.18, audioCtxRef.current?.currentTime || 0, 0.05);
+    }
+  }, [volume]);
+
+  const handlePlay = useCallback(() => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = createAudioContext();
+    }
+    setPlaying((p) => {
+      const next = !p;
+      if (next) {
+        startAudio(currentSong?.mood, volume);
+      } else {
+        stopAudio();
+      }
+      return next;
+    });
+  }, [currentSong, volume, startAudio, stopAudio]);
+
+  const handleNext = useCallback(() => {
     setBaseIndex((i) => (i + 1) % songs.length);
     setProgress(0);
-  };
+  }, []);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     setBaseIndex((i) => (i - 1 + songs.length) % songs.length);
     setProgress(0);
-  };
+  }, []);
+
+  // Restart audio when song changes while playing
+  useEffect(() => {
+    if (playing) {
+      startAudio(currentSong?.mood, volume);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
+
+  // Stop audio on unmount
+  useEffect(() => {
+    return () => {
+      stopAudio();
+      audioCtxRef.current?.close();
+    };
+  }, [stopAudio]);
 
   useEffect(() => {
     if (playing) {
@@ -40,7 +143,7 @@ const MusicPlayer = ({ activeSong: externalSong }) => {
       clearInterval(intervalRef.current);
     }
     return () => clearInterval(intervalRef.current);
-  }, [playing, currentIndex]);
+  }, [playing, currentIndex, handleNext]);
 
   const handleProgressClick = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -81,7 +184,7 @@ const MusicPlayer = ({ activeSong: externalSong }) => {
                 <li key={song.id}>
                   <button
                     className={`player__queue-item ${i === currentIndex ? "player__queue-item--active" : ""}`}
-                    onClick={() => { setBaseIndex(i); setProgress(0); setPlaying(true); }}
+                    onClick={() => { setBaseIndex(i); setProgress(0); setPlaying(true); if (!audioCtxRef.current) { audioCtxRef.current = createAudioContext(); } startAudio(song.mood, volume); }}
                     aria-label={`Play ${song.title} by ${song.artist}`}
                     aria-current={i === currentIndex ? "true" : undefined}
                     style={i === currentIndex ? { "--item-color": accentColor } : {}}

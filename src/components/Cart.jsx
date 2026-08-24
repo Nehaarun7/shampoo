@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useCart } from "../context/useCart";
 
-const Cart = ({ isOpen, onClose }) => {
+const Cart = ({ isOpen, onClose, onCheckout }) => {
   const { items, dispatch, totalItems, totalPrice } = useCart();
 
   useEffect(() => {
@@ -129,8 +129,8 @@ const Cart = ({ isOpen, onClose }) => {
                 <span>₹{totalPrice}</span>
               </div>
             </div>
-            <button className="btn btn--primary btn--lg cart-checkout-btn" aria-label="Proceed to checkout (demo)">
-              Proceed to Checkout
+            <button className="btn btn--primary btn--lg cart-checkout-btn" onClick={onCheckout} aria-label="Proceed to checkout">
+              Proceed to Checkout →
             </button>
             <button
               className="cart-clear-btn"
