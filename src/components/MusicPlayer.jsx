@@ -41,42 +41,45 @@ const MusicPlayer = ({ activeSong: externalSong }) => {
     nodesRef.current = [];
   }, []);
 
-  // Play a looping ambient tone sequence for the current song's mood
+  // Play a looping ambient tone sequence for the current song's mood.
+  // ctx.resume() is awaited so the AudioContext is active before nodes start
+  // (browsers suspend AudioContext until after a user gesture).
   const startAudio = useCallback((mood, vol) => {
     stopAudio();
     const ctx = audioCtxRef.current;
     if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume();
 
-    const scale = moodScales[mood] || moodScales.happy;
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime((vol / 100) * 0.18, ctx.currentTime);
-    masterGain.connect(ctx.destination);
+    ctx.resume().then(() => {
+      const scale = moodScales[mood] || moodScales.happy;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime((vol / 100) * 0.18, ctx.currentTime);
+      masterGain.connect(ctx.destination);
 
-    // Play a gentle arpeggio loop using the mood scale
-    scale.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
+      // Play a gentle arpeggio loop using the mood scale
+      scale.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
 
-      osc.type = mood === "energetic" ? "sawtooth" : mood === "focused" ? "square" : "sine";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        osc.type = mood === "energetic" ? "sawtooth" : mood === "focused" ? "square" : "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
 
-      // Detune slightly for a richer sound
-      osc.detune.setValueAtTime((i % 2 === 0 ? 5 : -5), ctx.currentTime);
+        // Detune slightly for a richer sound
+        osc.detune.setValueAtTime((i % 2 === 0 ? 5 : -5), ctx.currentTime);
 
-      gainNode.gain.setValueAtTime(0, ctx.currentTime);
-      // Stagger each note entry
-      gainNode.gain.setTargetAtTime(0.12, ctx.currentTime + i * 0.3, 0.1);
+        gainNode.gain.setValueAtTime(0, ctx.currentTime);
+        // Stagger each note entry
+        gainNode.gain.setTargetAtTime(0.12, ctx.currentTime + i * 0.3, 0.1);
 
-      osc.connect(gainNode);
-      gainNode.connect(masterGain);
-      osc.start(ctx.currentTime + i * 0.3);
+        osc.connect(gainNode);
+        gainNode.connect(masterGain);
+        osc.start(ctx.currentTime + i * 0.3);
 
-      nodesRef.current.push(osc);
+        nodesRef.current.push(osc);
+      });
+
+      // Keep a reference to masterGain so we can update volume
+      nodesRef.current.push(masterGain);
     });
-
-    // Keep a reference to masterGain so we can update volume
-    nodesRef.current.push(masterGain);
   }, [stopAudio]);
 
   // Update volume on all active gain nodes
@@ -184,7 +187,15 @@ const MusicPlayer = ({ activeSong: externalSong }) => {
                 <li key={song.id}>
                   <button
                     className={`player__queue-item ${i === currentIndex ? "player__queue-item--active" : ""}`}
-                    onClick={() => { setBaseIndex(i); setProgress(0); setPlaying(true); if (!audioCtxRef.current) { audioCtxRef.current = createAudioContext(); } startAudio(song.mood, volume); }}
+                    onClick={() => {
+                      setBaseIndex(i);
+                      setProgress(0);
+                      setPlaying(true);
+                      if (!audioCtxRef.current) {
+                        audioCtxRef.current = createAudioContext();
+                      }
+                      startAudio(song.mood, volume);
+                    }}
                     aria-label={`Play ${song.title} by ${song.artist}`}
                     aria-current={i === currentIndex ? "true" : undefined}
                     style={i === currentIndex ? { "--item-color": accentColor } : {}}

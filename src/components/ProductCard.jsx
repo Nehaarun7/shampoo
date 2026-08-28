@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useCart } from "../context/useCart";
+import { useWishlist } from "../context/WishlistContext";
 
 const ProductCard = ({ product }) => {
   const { dispatch } = useCart();
+  const { toggle, isWishlisted } = useWishlist();
   const [added, setAdded] = useState(false);
   const [flipped, setFlipped] = useState(false);
+  const wishlisted = isWishlisted(product.id);
 
   const handleAdd = () => {
     dispatch({ type: "ADD_ITEM", payload: product });
@@ -47,13 +50,25 @@ const ProductCard = ({ product }) => {
           </div>
           <div className="product-card__footer">
             <span className="product-card__price">₹{product.price}</span>
-            <button
-              className={`btn btn--primary btn--sm ${added ? "btn--success" : ""}`}
-              onClick={handleAdd}
-              aria-label={added ? `${product.name} added to cart` : `Add ${product.name} to cart`}
-            >
-              {added ? "✓ Added!" : "Add to Cart"}
-            </button>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <button
+                className={`product-card__wish ${wishlisted ? "product-card__wish--active" : ""}`}
+                onClick={(e) => { e.stopPropagation(); toggle(product); }}
+                aria-label={wishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                aria-pressed={wishlisted}
+              >
+                <svg width="16" height="16" fill={wishlisted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                </svg>
+              </button>
+              <button
+                className={`btn btn--primary btn--sm ${added ? "btn--success" : ""}`}
+                onClick={handleAdd}
+                aria-label={added ? `${product.name} added to cart` : `Add ${product.name} to cart`}
+              >
+                {added ? "✓ Added!" : "Add to Cart"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

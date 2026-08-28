@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# EmailJS credentials — keep out of version control
+src/utils/emailService.js

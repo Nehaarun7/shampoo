@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "../context/useCart";
+import { useOrderHistory } from "../context/OrderHistoryContext";
+import { sendOrderConfirmation } from "../utils/emailService";
 
-const STEPS = ["Cart", "Shipping", "Confirm"];
+const STEPS = ["Cart", "Details", "Confirm"];
 
 const Checkout = ({ isOpen, onClose }) => {
   const { items, dispatch, totalItems, totalPrice } = useCart();
+  const { addOrder } = useOrderHistory();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: "", email: "", phone: "",
@@ -12,9 +15,21 @@ const Checkout = ({ isOpen, onClose }) => {
   });
   const [errors, setErrors] = useState({});
   const [ordered, setOrdered] = useState(false);
+  const [orderId, setOrderId] = useState("");
+  const [sending, setSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState(null); // "sent" | "failed" | null
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e) => { if (e.key === "Escape") handleClose(); };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target === e.currentTarget) handleClose();
   };
 
   const handleChange = (e) => {
@@ -22,7 +37,7 @@ const Checkout = ({ isOpen, onClose }) => {
     setErrors((er) => ({ ...er, [e.target.name]: "" }));
   };
 
-  const validateShipping = () => {
+  const validateDetails = () => {
     const errs = {};
     if (!form.name.trim()) errs.name = "Name is required";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Valid email required";
@@ -36,24 +51,44 @@ const Checkout = ({ isOpen, onClose }) => {
 
   const handleNext = () => {
     if (step === 1) {
-      const errs = validateShipping();
+      const errs = validateDetails();
       if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     }
     setStep((s) => s + 1);
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
+    setSending(true);
     setOrdered(true);
+
+    // Generate order ID and save to history
+    const id = `SS-${Date.now().toString(36).toUpperCase()}`;
+    setOrderId(id);
+    addOrder({ orderId: id, form, items, totalPrice });
     dispatch({ type: "CLEAR_CART" });
+
+    // Send confirmation email
+    try {
+      await sendOrderConfirmation({ form, items, totalPrice });
+      setEmailStatus("sent");
+    } catch {
+      setEmailStatus("failed");
+    } finally {
+      setSending(false);
+    }
+
+    // Auto-close after success screen
     setTimeout(() => {
       setOrdered(false);
       setStep(0);
+      setEmailStatus(null);
       setForm({ name: "", email: "", phone: "", address: "", city: "", pincode: "", state: "" });
       onClose();
-    }, 3500);
+    }, 5000);
   };
 
   const handleClose = () => {
+    if (ordered) return; // don't close mid-order
     setStep(0);
     setErrors({});
     onClose();
@@ -67,13 +102,15 @@ const Checkout = ({ isOpen, onClose }) => {
         {/* Header */}
         <div className="checkout-header">
           <h2 className="checkout-title">
-            {ordered ? "🎉 Order Placed!" : `Checkout — ${STEPS[step]}`}
+            {ordered ? "🎉 Order Confirmed!" : `Checkout — ${STEPS[step]}`}
           </h2>
-          <button className="checkout-close" onClick={handleClose} aria-label="Close checkout">
-            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+          {!ordered && (
+            <button className="checkout-close" onClick={handleClose} aria-label="Close checkout">
+              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Step indicators */}
@@ -92,17 +129,23 @@ const Checkout = ({ isOpen, onClose }) => {
         {/* Body */}
         <div className="checkout-body">
           {ordered ? (
-            <OrderSuccess name={form.name} />
+            <OrderSuccess
+              name={form.name}
+              orderId={orderId}
+              email={form.email}
+              sending={sending}
+              emailStatus={emailStatus}
+            />
           ) : step === 0 ? (
             <StepCart items={items} dispatch={dispatch} totalItems={totalItems} totalPrice={totalPrice} />
           ) : step === 1 ? (
-            <StepShipping form={form} errors={errors} onChange={handleChange} />
+            <StepDetails form={form} errors={errors} onChange={handleChange} />
           ) : (
             <StepConfirm items={items} form={form} totalPrice={totalPrice} />
           )}
         </div>
 
-        {/* Footer actions */}
+        {/* Footer */}
         {!ordered && (
           <div className="checkout-footer">
             {step > 0 && (
@@ -117,7 +160,7 @@ const Checkout = ({ isOpen, onClose }) => {
                 onClick={handleNext}
                 disabled={step === 0 && items.length === 0}
               >
-                {step === 0 ? "Continue to Shipping →" : "Review Order →"}
+                {step === 0 ? "Enter Details →" : "Review Order →"}
               </button>
             ) : (
               <button className="btn btn--primary btn--lg" onClick={handlePlaceOrder}>
@@ -182,21 +225,29 @@ const StepCart = ({ items, dispatch, totalItems, totalPrice }) => (
   </div>
 );
 
-/* ── Step 1: Shipping Details ── */
-const StepShipping = ({ form, errors, onChange }) => (
-  <form className="checkout-form" onSubmit={(e) => e.preventDefault()} noValidate>
-    <div className="checkout-form__row">
-      <Field label="Full Name" name="name" value={form.name} error={errors.name} onChange={onChange} placeholder="Neha Arun" />
-      <Field label="Email" name="email" type="email" value={form.email} error={errors.email} onChange={onChange} placeholder="neha@email.com" />
-    </div>
-    <Field label="Phone Number" name="phone" type="tel" value={form.phone} error={errors.phone} onChange={onChange} placeholder="9876543210" />
-    <Field label="Address" name="address" value={form.address} error={errors.address} onChange={onChange} placeholder="123, Main Street, Apt 4B" />
-    <div className="checkout-form__row">
-      <Field label="City" name="city" value={form.city} error={errors.city} onChange={onChange} placeholder="Chennai" />
-      <Field label="Pincode" name="pincode" value={form.pincode} error={errors.pincode} onChange={onChange} placeholder="600001" />
-    </div>
-    <Field label="State" name="state" value={form.state} error={errors.state} onChange={onChange} placeholder="Tamil Nadu" />
-  </form>
+/* ── Step 1: Buyer Details ── */
+const StepDetails = ({ form, errors, onChange }) => (
+  <div className="checkout-details">
+    <div className="checkout-details__section-label">👤 Your Information</div>
+    <form className="checkout-form" onSubmit={(e) => e.preventDefault()} noValidate>
+      <div className="checkout-form__row">
+        <Field label="Full Name" name="name" value={form.name} error={errors.name} onChange={onChange} placeholder="Neha Arun" />
+        <Field label="Email Address" name="email" type="email" value={form.email} error={errors.email} onChange={onChange} placeholder="neha@email.com" />
+      </div>
+      <Field label="Phone Number" name="phone" type="tel" value={form.phone} error={errors.phone} onChange={onChange} placeholder="9876543210" />
+
+      <div className="checkout-details__section-label" style={{ marginTop: "1.25rem" }}>📦 Delivery Address</div>
+      <Field label="Street Address" name="address" value={form.address} error={errors.address} onChange={onChange} placeholder="123, Main Street, Apt 4B" />
+      <div className="checkout-form__row">
+        <Field label="City" name="city" value={form.city} error={errors.city} onChange={onChange} placeholder="Chennai" />
+        <Field label="Pincode" name="pincode" value={form.pincode} error={errors.pincode} onChange={onChange} placeholder="600001" />
+      </div>
+      <Field label="State" name="state" value={form.state} error={errors.state} onChange={onChange} placeholder="Tamil Nadu" />
+    </form>
+    <p className="checkout-email-note">
+      📧 An order confirmation will be sent to your email after placing the order.
+    </p>
+  </div>
 );
 
 const Field = ({ label, name, type = "text", value, error, onChange, placeholder }) => (
@@ -236,11 +287,15 @@ const StepConfirm = ({ items, form, totalPrice }) => (
       </ul>
     </div>
     <div className="checkout-confirm__section">
-      <h3>📦 Ship to</h3>
-      <p>{form.name}</p>
+      <h3>👤 Buyer Details</h3>
+      <p><strong>{form.name}</strong></p>
+      <p>{form.email}</p>
+      <p>{form.phone}</p>
+    </div>
+    <div className="checkout-confirm__section">
+      <h3>📦 Deliver to</h3>
       <p>{form.address}</p>
       <p>{form.city}, {form.state} — {form.pincode}</p>
-      <p>{form.email} · {form.phone}</p>
     </div>
     <div className="checkout-confirm__section">
       <h3>💳 Payment</h3>
@@ -250,11 +305,32 @@ const StepConfirm = ({ items, form, totalPrice }) => (
 );
 
 /* ── Order Success ── */
-const OrderSuccess = ({ name }) => (
+const OrderSuccess = ({ name, orderId, email, sending, emailStatus }) => (
   <div className="checkout-success">
-    <div className="checkout-success__icon">🎵</div>
+    <div className="checkout-success__icon">{sending ? "⏳" : "🎵"}</div>
     <h3>Thank you, {name?.split(" ")[0] || "friend"}!</h3>
-    <p>Your order is confirmed. Time to press play and let the vibe begin.</p>
+    <p>Your order <strong style={{ color: "#1DB954" }}>#{orderId}</strong> is confirmed.</p>
+
+    {/* Email status */}
+    <div className="checkout-email-status">
+      {sending && (
+        <span className="checkout-email-status--sending">
+          <span className="co-spinner" /> Sending confirmation to {email}…
+        </span>
+      )}
+      {emailStatus === "sent" && (
+        <span className="checkout-email-status--sent">
+          ✅ Confirmation email sent to <strong>{email}</strong>
+        </span>
+      )}
+      {emailStatus === "failed" && (
+        <span className="checkout-email-status--failed">
+          ⚠️ Email delivery failed — but your order is saved! Check Order History.
+        </span>
+      )}
+    </div>
+
+    <p className="checkout-success__sub">Time to press play and lather up. Your vibe is on its way.</p>
     <div className="checkout-success__bars">
       {[1,2,3,4,5].map((i) => (
         <div key={i} className="checkout-success__bar" style={{ animationDelay: `${i * 0.12}s` }} />

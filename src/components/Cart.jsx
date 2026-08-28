@@ -5,12 +5,6 @@ const Cart = ({ isOpen, onClose, onCheckout }) => {
   const { items, dispatch, totalItems, totalPrice } = useCart();
 
   useEffect(() => {
-    if (isOpen) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => { document.body.style.overflow = ""; };
-  }, [isOpen]);
-
-  useEffect(() => {
     const handleKey = (e) => { if (e.key === "Escape") onClose(); };
     if (isOpen) document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
