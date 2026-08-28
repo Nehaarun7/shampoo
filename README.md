@@ -1,16 +1,42 @@
-# React + Vite
+# 🎵 Spotify Shampoo
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A mood-based shampoo brand that pairs fragrances with music vibes. Built for a competition.
 
-Currently, two official plugins are available:
+## 🚀 Live Demo
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+👉 **[https://spotify-shampoo.vercel.app](https://spotify-shampoo.vercel.app)**
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 🎵 Mood-based music player with Web Audio API
+- 🛒 Shopping cart with localStorage persistence
+- 💳 Multi-step checkout with email order confirmation
+- 💌 EmailJS integration — sends order details to buyer's email
+- ❤️ Wishlist — save favourite products
+- 📦 Order history — all past orders stored locally
+- ⭐ Loyalty points — earn 1 pt per ₹10 spent
+- 🧴 Product customizer — build your own shampoo blend
+- 🤖 Smart mood-based product recommendation
+- 📱 Fully responsive design
 
-## Expanding the Oxlint configuration
+## 🛠 Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+- React 19 + Vite
+- EmailJS (client-side email, no backend)
+- CSS custom properties + animations
+- localStorage for cart, wishlist, orders & points
+
+## 📧 Email Setup
+
+Copy `src/utils/emailService.example.js` to `src/utils/emailService.js` and fill in your [EmailJS](https://emailjs.com) credentials:
+
+```js
+const SERVICE_ID  = "your_service_id";
+const TEMPLATE_ID = "your_template_id";
+const PUBLIC_KEY  = "your_public_key";
+```
+
+## 🔗 Links
+
+- **Live:** https://spotify-shampoo.vercel.app
+- **Repo:** https://github.com/Nehaarun7/shampoo
